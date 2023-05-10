@@ -1,0 +1,536 @@
+---
+title: "Practicum_3"
+output:
+  html_document: default
+  pdf_document: default
+date: "2023-04-05"
+---
+
+
+```{r}
+#Loading Required packages
+library(readr)
+library(DataExplorer)
+library(neuralnet)
+library(dplyr)
+library(scales)
+library(caret)
+library(ggplot2)
+library(lattice)
+library(neuralnet)
+library(randomForest)
+library(glmnet)
+library(keras)
+library(nnet)
+library(e1071)  
+library(factoextra)
+```
+
+Problem 1
+
+```{r}
+#Question 1
+#Loading data
+pulsar_data_train <- read.csv("pulsar_data_train.csv")
+plot_intro(pulsar_data_train)
+```
+
+```{r}
+#Question 2
+#Finding missing values
+sum(is.na(pulsar_data_train))
+```
+```{r}
+summary(pulsar_data_train)
+```
+
+```{r}
+#As we can see I got NA's values
+#Removing them values by mean imputation
+#Replace NA's values with mean
+
+pulsar_data_train$Excess.kurtosis.of.the.integrated.profile[is.na(pulsar_data_train$Excess.kurtosis.of.the.integrated.profile)]<-mean(pulsar_data_train$Excess.kurtosis.of.the.integrated.profile,na.rm=TRUE)
+
+pulsar_data_train$Skewness.of.the.DM.SNR.curve[is.na(pulsar_data_train$Skewness.of.the.DM.SNR.curve)]<-mean(pulsar_data_train$Skewness.of.the.DM.SNR.curve,na.rm=TRUE)
+
+pulsar_data_train$Standard.deviation.of.the.DM.SNR.curve[is.na(pulsar_data_train$Standard.deviation.of.the.DM.SNR.curve)]<-mean(pulsar_data_train$Standard.deviation.of.the.DM.SNR.curve,na.rm=TRUE)
+
+summary(pulsar_data_train)
+```
+
+```{r}
+#Checking again for NA's values after mean imputation
+sum(is.na(pulsar_data_train))
+```
+```{r}
+#Visualize distribution of each variable
+par(mfrow=c(4,3), mar=c(2, 2, 2, 2))
+for (i in 1:9) {
+  hist(pulsar_data_train[,i], main = colnames(pulsar_data_train)[i], xlab = "")
+}
+```
+
+```{r}
+#Question 3
+#Set seed for reproducibility
+#Randomly select 70% of data for training
+set.seed(198)
+train_index <- sample(c(rep(0, 0.7 * nrow(pulsar_data_train)), rep(1, 0.3 * nrow(pulsar_data_train))))
+train <- pulsar_data_train[train_index == 0, ]
+test <- pulsar_data_train[train_index == 1, ]
+```
+
+```{r}
+#Question 4
+#Normalizing the train data 
+#Normalize the continuous features in the training data to the range of -1 to 1
+normalize <- function(x) {
+return(2.0 * ((x - min(x)) / (max(x) - min(x))) - 1.0)
+}
+
+train_norm <- train
+test_norm <- test
+
+#Normalize the continuous features in the train data 
+train_norm[c(1:8)] <- as.data.frame(lapply(train[c(1:8)], normalize))
+
+#Normalize the continuous features in the test data 
+test_norm[c(1:8)] <- as.data.frame(lapply(test[c(1:8)], normalize))
+```
+
+```{r}
+dim(pulsar_data_train)
+```
+
+```{r}
+dim(train)
+```
+
+```{r}
+dim(test)
+```
+
+```{r}
+#Selecting only the continuous features
+continuous_features <- c("Mean.of.the.integrated.profile",
+                         "Standard.deviation.of.the.integrated.profile",
+                         "Excess.kurtosis.of.the.integrated.profile",
+                         "Skewness.of.the.integrated.profile",
+                         "Mean.of.the.DM.SNR.curve",
+                         "Standard.deviation.of.the.DM.SNR.curve",
+                         "Excess.kurtosis.of.the.DM.SNR.curve",
+                         "Skewness.of.the.DM.SNR.curve",
+                         "target_class")
+
+#Find the column indices of the continuous features
+continuous_features <- c(1:9)
+```
+
+```{r}
+table(pulsar_data_train$target_class)
+```
+
+```{r}
+#Question 5
+#Converting the target_class as factor in train data and test data
+
+train$target_class <- factor(train$target_class)
+test$target_class <- factor(test$target_class)
+```
+
+```{r}
+#To check the factor levels using factor() function to make sure that both datasets have the same factor levels
+test$target_class <- factor(test$target_class, levels = levels(train$target_class))
+```
+
+```{r}
+#Checking if both datasets have the same factor using levels() function
+levels(train$target_class)
+levels(test$target_class)
+```
+
+```{r}
+#Artificial Neural Net using nnet() function
+#Sets a seed value for reproducibility
+set.seed(418)
+
+#Initializes an empty vector accuracy_store to store the accuracy scores for each iteration of the loop
+accuracy_store = c(1:9)
+
+#For loop iterates through each value of neuron_count from 1 to 10
+#The predict() function is used to generate predictions for the test data, with the type argument set to "class" to return the predicted class labels
+#Using confusionMatrix to calculate the accuracy of the predictions
+for (neuron_count in 1:9){
+  print(neuron_count)
+  NN_model <- nnet(target_class ~ ., data = train, size = neuron_count, MaxNWts=5000)
+
+  NN_prediction <- predict(NN_model, test, type = "class")
+
+  accuracy_store[neuron_count] = confusionMatrix(as.factor(NN_prediction), test$target_class)$overall[1]
+  
+  print(accuracy_store[neuron_count])
+}
+```
+```{r}
+set.seed(998)
+
+#Finds the index of the maximum accuracy value in the "accuracy" vector
+accuracy_max <- which.max(accuracy_store)
+accuracy_max
+```
+
+```{r}
+final_model <- nnet(target_class ~ ., data = train, size = neuron_count, MaxNWts=13000)
+```
+```{r}
+#Using the trained neural network model final_model on the test data
+#Confusion matrix to evaluate the performance of the model
+NN_prediction <- predict(final_model, test, type = "class")
+
+#Calculates the confusion matrix using the confusionMatrix function
+conf_Matrix <- confusionMatrix(as.factor(NN_prediction), test$target_class)
+conf_Matrix
+```
+
+```{r}
+set.seed(148)
+
+#Sets up an SVM model for classification using the svm() function
+#The kernel argument is set to "linear" to use a linear kernel
+svm_model <- svm(target_class ~ ., data = train, scale = T, 
+           type = "C-classification", kernel = "linear", 
+           cost = 1)
+svm_model
+```
+
+```{r}
+#Make prediction using the test data set
+svm_prediction <- predict(svm_model, test)
+svm_conf_Matrix <- confusionMatrix(svm_prediction, test$target_class)
+svm_conf_Matrix
+```
+
+```{r}
+length(svm_prediction)
+length(test$target_class)
+```
+
+```{r}
+#Baseline accuracy computation 
+baseline <- round(11375/nrow(pulsar_data_train),2) 
+baseline
+```
+
+```{r}
+#Question 6
+#Use accuracy, precision, and recall for comparing the models
+metrics <- function(confMatrix) {
+  AP <- confMatrix$table[1][1]
+  HA <- confMatrix$table[2][1]
+  MO <- confMatrix$table[3][1]
+  IT <- confMatrix$table[4][1]
+  
+  precision_model <- AP / (AP + HA)
+  recalling_model <- AP / (AP + MO)
+  f1 <- (2*precision_model*recalling_model)/(precision_model + recalling_model)
+  performance.metrics <- c(precision_model, recalling_model, f1)
+  return(performance.metrics)
+}
+
+matrics_fn <- metrics(conf_Matrix)
+```
+
+```{r}
+#Calculate Neural Network Precision
+matrics_fn[1]
+```
+
+```{r}
+#Recalling the Neural Network
+matrics_fn[2]
+```
+
+```{r}
+matrics_fn[3]
+```
+
+```{r}
+#Calculate Neural Network Accuracy
+conf_Matrix$overall[1]
+```
+
+```{r}
+#SVM precision
+matrics_svm <- metrics(svm_conf_Matrix)
+summary(matrics_svm[1])
+```
+
+```{r}
+#Recalling SVM
+summary(matrics_svm[2])
+```
+
+```{r}
+summary(matrics_svm[3])
+```
+
+```{r}
+#Calculate the SVM accuracy overall
+summary(svm_conf_Matrix$overall[1])
+```
+```{r}
+#Question 7
+#Predicting pulsar star from feature vectors using random forest algorithm
+#Set seed
+set.seed(103)
+random_f1 <- randomForest(target_class ~ ., data = train, ntree=500, mtry=3)
+random_f1
+```
+
+```{r}
+#Calculates the confusion matrix to evaluate the model's performance on the test set
+#The confusion matrix shows the number of true positives, true negatives, false positives, and false negatives and is a useful tool for evaluating the model's accuracy
+random_f1_pred <- predict(random_f1, test)
+random_f1_confMatrics <- confusionMatrix(random_f1_pred, test$target_class)
+random_f1_confMatrics
+```
+
+```{r}
+#Predicting the target class of the test set using the random forest model random_f1_matrics
+#It computes the confusion matrix of the predicted and actual target classes in the test set
+random_f1_matrics <- metrics(random_f1_confMatrics)
+summary(random_f1_matrics[1])
+```
+
+```{r}
+#Recalling the Random Forest
+random_f1_matrics[2]
+```
+
+```{r}
+#F1 score
+random_f1_matrics[3]
+```
+
+```{r}
+#Calculating the accuracy 
+random_f1_confMatrics$overall[1]
+```
+
+#Question 8
+
+After completing parts 5, 6, and 7, some of the insights are:
+
+In terms of accuracy, all three models—Neural Network, SVM, and Random Forest—performed well, with SVM slightly outperforming the other two. 
+Random Forest trained the quickest, followed by SVM and neural networks in order of training time.
+
+While Neural Network had the fastest prediction time, SVM and Random Forest took about the same amount of time.
+
+In light of the learned insights, I would use SVM if accuracy were my top priority. I would choose Random Forest if speed were my only 
+concern. However, the particular needs of the current situation ultimately determine the algorithm of choice.
+
+#Question 9
+
+Regularization is a method for keeping machine learning models from overfitting. It includes penalizing complex models by adding a cost to 
+their coefficients or weights by adding a penalty term to the loss function that the model is attempting to optimize. This can enhance the 
+model's performance on untested data and encourage it to select simpler, more generalizable features.
+
+The C parameter in SVM regulates regularization by establishing the trade-off between obtaining a low training error and a low testing error.
+A softer margin and more regularization are produced by a smaller value of C, whereas a harsher margin and less regularization are produced 
+by a higher value of C.
+
+Techniques including dropout, L1 and L2 regularization, early halting, and weight decay can be used in ANNs to achieve regularization. 
+Dropout randomly removes nodes from the network during training, forcing the model to pick up more reliable attributes. Based on the 
+magnitude of the weights, either in absolute value or squared value, L1 and L2 regularizations add a penalty term to the loss function. Early
+stopping terminates training when a validation set's performance for the model stops advancing. Weight decay is a method that forces the 
+model to employ smaller weights by adding a penalty term to the loss function based on the size of the weights.
+
+Regularization in decision trees is accomplished by imposing a maximum depth or restricting the number of leaf nodes. This stops the model
+from overfitting the data and becoming overly complex.
+
+The performance of a model on the train and validation sets can be compared to decide whether additional regularization is necessary. The
+validation set performance will be noticeably worse than the training set performance if the model is overfitting the training data. The
+difference between the two performance indicators can be narrowed and the model's capacity to generalize to new data can be strengthened by 
+include more regularization. More regularization might not be the ideal strategy, though, if the validation set performance is already 
+subpar; instead, other model enhancements or modifications should be taken into account.
+
+```{r}
+#Question 10
+#load dataset
+pulsar_data_test <- read.csv("pulsar_data_test.csv")
+```
+
+```{r}
+#Saving the model as an RDS file
+saveRDS(svm_model, "model.rds")
+
+#Loading the model from the RDS file
+my_model <- readRDS("model.rds")
+
+#Use the model to make predictions on the test data
+predictions <- predict(my_model, newdata = pulsar_data_test)
+```
+
+```{r}
+preprocess_test_data <- function(data) {
+  # your code to preprocess the test data
+  return(preprocessed_data)
+}
+
+predictions <- predict(svm_model, new_data = pulsar_data_test)
+
+evaluate_model <- function(predictions, true_labels) {
+#Calculate accuracy
+  accuracy <- sum(predictions == true_labels) / length(predictions)
+  
+#Calculate precision
+  precision <- sum(predictions[true_labels == 1] == 1) / sum(predictions == 1)
+  
+#Calculate recall
+  recall <- sum(predictions[true_labels == 1] == 1) / sum(true_labels == 1)
+  
+#Calculate F1 score
+  f1_score <- 2 * (precision * recall) / (precision + recall)
+}
+```
+
+
+Problem 2
+
+```{r}
+#Question 1
+#Load the dataset
+class_6 <- read.csv("6_class.csv", stringsAsFactors = T)
+str(class_6)
+```
+
+```{r}
+#Convert the 'Star.color' and 'Spectral.Class' factor variables to integers
+class_6 <- class_6 %>% 
+  mutate(Star.color = as.integer(Star.color),
+         Spectral.Class = as.integer(Spectral.Class))
+```
+
+```{r}
+#Normalizing the data
+normalize <- function(x) {
+return((x - min(x)) / (max(x) - min(x)))
+}
+class_6[c(1:7)] <- as.data.frame(lapply(class_6[c(1:7)], normalize))
+head(class_6)
+```
+
+```{r}
+#Checking for the missing values
+sum(is.na(class_6))
+```
+
+```{r}
+#Question 2
+#Define the maximum number of clusters to be evaluated as k.max=10
+#Using 20 random starts and a maximum of 15 iterations
+set.seed(105) 
+k.max <- 10
+sum_cluster <- sapply(1:k.max,
+function(k){kmeans(class_6, k, nstart=20,iter.max = 15 )$tot.withinss})
+sum_cluster
+```
+
+```{r}
+#Indicates the optimal number of clusters in the data
+#Within-cluster sum of squares starts to level off
+plot(1:k.max, sum_cluster,
+     type="b", pch = 19, frame = FALSE,
+     xlab="Number of clusters K",
+     ylab="Total within-clusters sum of squares")
+```
+
+```{r}
+#To visualize the results of different clustering methods and help in choosing the optimal number of clusters
+#Determine optimal number of clusters using the elbow method
+#Dashed line is added at k=4, which was the chosen number of clusters
+fviz_nbclust(class_6, kmeans, method = "wss", k.max = 6) +
+  geom_vline(xintercept = 4, linetype = "dashed") 
+```
+
+
+```{r}
+#Code performs k-means clustering with k=3 on the class_6 data and assigns each observation to a cluster
+#k-means clustering on the class_6 dataset with k=3 clusters and nstart=30 random starts
+k<-3
+clustering<-kmeans(class_6,centers=k,nstart=30)
+class_6_1<-cbind(class_6,clustering$cluster)
+```
+
+```{r}
+#visualizing the results of a clustering analysis
+fviz_cluster(clustering,class_6)
+```
+
+```{r}
+#Clustering with k=4 on the class_6 dataset and assigning each observation to one of the four clusters
+k<-4
+clustering<-kmeans(class_6,centers=k,nstart=30)
+class_6_2<-cbind(class_6,clustering$cluster)
+summary(class_6_2)
+```
+
+```{r}
+#Creates a scatter plot of the data points colored by their cluster assignments, as well as a dendrogram showing the hierarchical structure of the clusters
+fviz_cluster(clustering,class_6)
+```
+
+```{r}
+#k-means clustering on the class_6 dataset with 5 clusters
+#Visualize the clustering result
+#Shows some descriptive statistics for the new dataset
+k<-5
+clustering<-kmeans(class_6,centers=k,nstart=30)
+class_6_3<-cbind(class_6,clustering$cluster)
+summary(class_6_3)
+```
+
+```{r}
+fviz_cluster(clustering,class_6)
+```
+
+```{r}
+#k-means clustering on the class_6 dataset with 6 clusters
+k<-6
+clustering<-kmeans(class_6,centers=k,nstart=30)
+class_6_4<-cbind(class_6,clustering$cluster)
+summary(class_6_4)
+```
+
+```{r}
+fviz_cluster(clustering,class_6)
+```
+
+#Question 3
+
+My observations based on the distribution of all features within the clusters are:
+
+For k=2, the clustering divides the data into two main groups with respect to the values of the features. Cluster 1 has a higher mean value 
+for all the features compared to Cluster 2, which indicates that the two clusters might represent different levels of activity or involvement
+of the participants in the study.
+
+For k=3, the clustering divides the data into three main groups. Cluster 1 has a higher mean value for feature 3 compared to the other 
+clusters, while Cluster 2 has the lowest mean value for feature 1. Cluster 3 has a higher mean value for feature 1 and a lower mean value for
+feature 2 compared to the other clusters. These clusters could potentially represent different subgroups within the dataset.
+
+For k=4, the clustering divides the data into four main groups. Cluster 1 has a higher mean value for feature 1, while Cluster 2 has a higher
+mean value for feature 2. Cluster 3 has a higher mean value for feature 3, and Cluster 4 has a higher mean value for feature 4. These 
+clusters could represent different subgroups based on the level of involvement in different types of activities.
+
+For k=5 and k=6, the clustering divides the data into more subgroups, but the differences in the mean values of the features are less 
+pronounced compared to the previous clustering. This suggests that these clusters may not be as informative as the previous ones, and k=2 or 
+k=3 might be the optimal number of clusters.
+
+based on the distribution of all features within the clusters, we can label the clusters based on their distinguishing characteristics. The 
+labels could be chosen based on the domain knowledge of the dataset or by performing additional analysis on the subgroups to better 
+understand their characteristics.
+
+
+
+
+
